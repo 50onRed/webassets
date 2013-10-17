@@ -2,12 +2,6 @@
 import os
 from setuptools import setup, find_packages
 try:
-    from itertools import imap as map, izip as zip
-except ImportError:
-    # Python3 has those in builtins.
-    pass
-
-try:
     from sphinx.setup_command import BuildDoc
     cmdclass = {'build_sphinx': BuildDoc}
 except ImportError:
@@ -52,7 +46,6 @@ setup(
         'License :: OSI Approved :: BSD License',
         'Operating System :: OS Independent',
         'Programming Language :: Python',
-        'Programming Language :: Python :: 3',
         'Topic :: Internet :: WWW/HTTP',
         'Topic :: Software Development :: Libraries',
         ],

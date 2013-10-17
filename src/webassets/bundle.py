@@ -1,15 +1,13 @@
 import os
 from os import path
-from webassets import six
-from webassets.six.moves import map
-from webassets.six.moves import zip
+import urlparse
 
-from .filter import get_filter
-from .merge import (FileHunk, UrlHunk, FilterTool, merge, merge_filters,
+from filter import get_filter
+from merge import (FileHunk, UrlHunk, FilterTool, merge, merge_filters,
                    select_filters, MoreThanOneFilterError, NoFilters)
-from .updater import SKIP_CACHE
-from .exceptions import BundleError, BuildError
-from .utils import cmp_debug_levels, urlparse
+from updater import SKIP_CACHE
+from exceptions import BundleError, BuildError
+from utils import cmp_debug_levels
 
 
 __all__ = ('Bundle', 'get_all_bundle_files',)
@@ -58,7 +56,7 @@ class Bundle(object):
         self.extra = options.pop('extra', {})
         if options:
             raise TypeError("got unexpected keyword argument '%s'" %
-                            list(options.keys())[0])
+                            options.keys()[0])
 
     def __repr__(self):
         return "<%s output=%s, filters=%s, contents=%s>" % (
@@ -79,12 +77,8 @@ class Bundle(object):
             self._filters = ()
             return
 
-        if isinstance(value, six.string_types):
-            # 333: Simplify w/o condition?
-            if six.PY3:
-                filters = map(str.strip, value.split(','))
-            else:
-                filters = map(unicode.strip, unicode(value).split(','))
+        if isinstance(value, basestring):
+            filters = map(unicode.strip, unicode(value).split(','))
         elif isinstance(value, (list, tuple)):
             filters = value
         else:
@@ -150,7 +144,7 @@ class Bundle(object):
             for item in self.contents:
                 try:
                     result = env.resolver.resolve_source(item)
-                except IOError as e:
+                except IOError, e:
                     raise BundleError(e)
                 if not isinstance(result, list):
                     result = [result]
@@ -175,7 +169,7 @@ class Bundle(object):
     def _get_depends(self):
         return self._depends
     def _set_depends(self, value):
-        self._depends = [value] if isinstance(value, six.string_types) else value
+        self._depends = [value] if isinstance(value, basestring) else value
         self._resolved_depends = None
     depends = property(_get_depends, _set_depends, doc=
     """Allows you to define an additional set of files (glob syntax
@@ -192,7 +186,7 @@ class Bundle(object):
             for item in self.depends:
                 try:
                     result = env.resolver.resolve_source(item)
-                except IOError as e:
+                except IOError, e:
                     raise BundleError(e)
                 if not isinstance(result, list):
                     result = [result]
@@ -217,12 +211,12 @@ class Bundle(object):
                 version = env.manifest.query(self, env)
             # Often the versioner is able to help.
             if not version:
-                from .version import VersionIndeterminableError
+                from version import VersionIndeterminableError
                 if env.versions:
                     try:
                         version = env.versions.determine_version(self, env)
                         assert version
-                    except VersionIndeterminableError as e:
+                    except VersionIndeterminableError, e:
                         reason = e
                 else:
                     reason = '"versions" option not set'
@@ -255,7 +249,7 @@ class Bundle(object):
         return hash((tuple(self.contents),
                      self.output,
                      tuple(self.filters),
-                     bool(self.debug)))
+                     self.debug))
         # Note how self.depends is not included here. It could be, but we
         # really want this hash to only change for stuff that affects the
         # actual output bytes. Note that modifying depends will be effective
@@ -409,7 +403,7 @@ class Bundle(object):
                         # very often is better than running filters
                         # unnecessarily occasionally.
                         cache_key=[FileHunk(cnt)] if not is_url(cnt) else [])
-                except MoreThanOneFilterError as e:
+                except MoreThanOneFilterError, e:
                     raise BuildError(e)
                 except NoFilters:
                     # Open the file ourselves.
@@ -439,11 +433,11 @@ class Bundle(object):
         try:
             try:
                 final = filtertool.apply_func(filters_to_run, 'concat', [hunks])
-            except MoreThanOneFilterError as e:
+            except MoreThanOneFilterError, e:
                 raise BuildError(e)
             except NoFilters:
                 final = merge([h for h, _ in hunks])
-        except IOError as e:
+        except IOError, e:
             # IOErrors can be raised here if hunks are loaded for the
             # first time. TODO: IOErrors can also be raised when
             # a file is read during the filter-apply phase, but we don't
@@ -509,32 +503,34 @@ class Bundle(object):
             # If we are given a stream, just write to it.
             output.write(hunk.data())
         else:
-            if has_placeholder(self.output) and not env.versions:
-                raise BuildError((
-                    'You have not set the "versions" option, but %s '
-                    'uses a version placeholder in the output target'
-                        % self))
+            # If it doesn't exist yet, create the target directory.
+            output = path.join(env.directory, self.output)
+            output_dir = path.dirname(output)
+            if not path.exists(output_dir):
+                os.makedirs(output_dir)
 
             version = None
             if env.versions:
                 version = env.versions.determine_version(self, env, hunk)
 
-            output_filename = self.resolve_output(env, version=version)
-
-            # If it doesn't exist yet, create the target directory.
-            output_dir = path.dirname(output_filename)
-            if not path.exists(output_dir):
-                os.makedirs(output_dir)
-
-            hunk.save(output_filename)
-            self.version = version
+            if not has_placeholder(self.output):
+                hunk.save(self.resolve_output(env))
+            else:
+                if not env.versions:
+                    raise BuildError((
+                        'You have not set the "versions" option, but %s '
+                        'uses a version placeholder in the output target'
+                            % self))
+                output = self.resolve_output(env, version=version)
+                hunk.save(output)
+                self.version = version
 
             if env.manifest:
                 env.manifest.remember(self, env, version)
             if env.versions and version:
                 # Hook for the versioner (for example set the timestamp of
                 # the file) to the actual version.
-                env.versions.set_version(self, env, output_filename, version)
+                env.versions.set_version(self, env, output, version)
 
         # The updater may need to know this bundle exists and how it
         # has been last built, in order to detect changes in the

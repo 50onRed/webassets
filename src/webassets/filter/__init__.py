@@ -4,14 +4,10 @@ contents (think minification, compression).
 
 from __future__ import with_statement
 
-import os
-import subprocess
+import os, subprocess
 import inspect
 import shlex
 import tempfile
-from webassets import six
-from webassets.six.moves import map
-from webassets.six.moves import zip
 try:
     frozenset
 except NameError:
@@ -32,7 +28,7 @@ def freezedicts(obj):
     if isinstance(obj, (list, tuple)):
         return type(obj)([freezedicts(sub) for sub in obj])
     if isinstance(obj, dict):
-        return frozenset(six.iteritems(obj))
+        return frozenset(obj.iteritems())
     return obj
 
 
@@ -48,16 +44,15 @@ def smartsplit(string, sep):
     be done.
     """
     assert string is not None   # or shlex will read from stdin
-    if not six.PY3:
-        # On 2.6, shlex fails miserably with unicode input
-        is_unicode = isinstance(string, unicode)
-        if is_unicode:
-            string = string.encode('utf8')
+    # shlex fails miserably with unicode input
+    is_unicode = isinstance(sep, unicode)
+    if is_unicode:
+        string = string.encode('utf8')
     l = shlex.shlex(string, posix=True)
     l.whitespace += ','
     l.whitespace_split = True
     l.quotes = ''
-    if not six.PY3 and is_unicode:
+    if is_unicode:
         return map(lambda s: s.decode('utf8'), list(l))
     else:
         return list(l)
@@ -70,8 +65,7 @@ class option(tuple):
     See ``parse_options()`` and ``Filter.options``.
     """
     def __new__(cls, initarg, configvar=None, type=None):
-        # If only one argument given, it is the configvar
-        if configvar is None:  
+        if configvar is None:  # If only one argument given, it is the configvar
             configvar = initarg
             initarg = None
         return tuple.__new__(cls, (initarg, configvar, type))
@@ -155,9 +149,9 @@ class Filter(object):
     def __hash__(self):
         return self.id()
 
-    def __eq__(self, other):
+    def __cmp__(self, other):
         if isinstance(other, Filter):
-            return self.id() == other.id()
+            return cmp(self.id(), other.id())
         return NotImplemented
 
     def set_environment(self, env):
@@ -204,12 +198,8 @@ class Filter(object):
 
         if value is None and not env is False:
             value = os.environ.get(env)
-            if value is not None:
-                if not six.PY3:
-                    # TODO: What charset should we use? What does Python 3 use?
-                    value = value.decode('utf8')
-                if type == list:
-                    value = smartsplit(value, ',')
+            if value and type == list:
+                value = smartsplit(value, ',')
 
         if value is None and require:
             err_msg = '%s was not found. Define a ' % what
@@ -267,8 +257,8 @@ class Filter(object):
                 # No value specified for this filter instance ,
                 # specifically attempt to load it from the environment.
                 setattr(self, attribute,
-                        self.get_config(setting=configvar, require=False,
-                                        type=type))
+                    self.get_config(setting=configvar, require=False,
+                                    type=type))
 
     def input(self, _in, out, **kw):
         """Implement your actual filter here.
@@ -332,57 +322,7 @@ class CallableFilter(Filter):
         return self.callable(_in, out)
 
 
-class ExternalToolMetaclass(type):
-    def __new__(cls, name, bases, attrs):
-        # First, determine the method defined for this very class. We
-        # need to pop the ``method`` attribute from ``attrs``, so that we
-        # create the class without the argument; allowing us then to look
-        # at a ``method`` attribute that parents may have defined.
-        #
-        # method defaults to 'output' if argv is set, to "implement
-        # no default method" without an argv.
-        if not 'method' in attrs and 'argv' in attrs:
-            chosen = 'output'
-        else:
-            chosen = attrs.pop('method', False)
-
-        # Create the class first, since this helps us look at any
-        # method attributes defined in the parent hierarchy.
-        klass = type.__new__(cls, name, bases, attrs)
-        parent_method = getattr(klass, 'method', None)
-
-        # Assign the method argument that we initially popped again.
-        klass.method = chosen
-
-        try:
-            # Don't do anything for this class itself
-            ExternalTool
-        except NameError:
-            return klass
-
-        # If the class already has a method attribute, this indicates
-        # that a parent class already dealt with it and enabled/disabled
-        # the methods, and we won't again.
-        if parent_method is not None:
-            return klass
-
-        methods = ('output', 'input', 'open')
-
-        if chosen is not None:
-            assert not chosen or chosen in methods, \
-                '%s not a supported filter method' % chosen
-            # Disable those methods not chosen.
-            for m in methods:
-                if m != chosen:
-                    # setdefault = Don't override actual methods the
-                    # class has in fact provided itself.
-                    if not m in klass.__dict__:
-                        setattr(klass, m, None)
-
-        return klass
-
-
-class ExternalTool(six.with_metaclass(ExternalToolMetaclass, Filter)):
+class ExternalTool(Filter):
     """Subclass that helps creating filters that need to run an external
     program.
 
@@ -407,6 +347,55 @@ class ExternalTool(six.with_metaclass(ExternalToolMetaclass, Filter)):
     argv = []
     method = None
 
+    class __metaclass__(type):
+        def __new__(cls, name, bases, attrs):
+            # First, determine the method defined for this very class. We
+            # need to pop the ``method`` attribute from ``attrs``, so that we
+            # create the class without the argument; allowing us then to look
+            # at a ``method`` attribute that parents may have defined.
+            #
+            # method defaults to 'output' if argv is set, to "implement
+            # no default method" without an argv.
+            if not 'method' in attrs and 'argv' in attrs:
+                chosen = 'output'
+            else:
+                chosen = attrs.pop('method', False)
+
+            # Create the class first, since this helps us look at any
+            # method attributes defined in the parent hierarchy.
+            klass = type.__new__(cls, name, bases, attrs)
+            parent_method = getattr(klass, 'method', None)
+
+            # Assign the method argument that we initially popped again.
+            klass.method = chosen
+
+            try:
+                # Don't do anything for this class itself
+                ExternalTool
+            except NameError:
+                return klass
+
+            # If the class already has a method attribute, this indicates
+            # that a parent class already dealt with it and enabled/disabled
+            # the methods, and we won't again.
+            if parent_method is not None:
+                return klass
+
+            methods = ('output', 'input', 'open')
+
+            if chosen is not None:
+                assert not chosen or chosen in methods, \
+                    '%s not a supported filter method' % chosen
+                # Disable those methods not chosen.
+                for m in methods:
+                    if m != chosen:
+                        # setdefault = Don't override actual methods the
+                        # class has in fact provided itself.
+                        if not m in klass.__dict__:
+                            setattr(klass, m, None)
+
+            return klass
+
     def open(self, out, source_path, **kw):
         self._evaluate([out, source_path], kw, out)
 
@@ -429,13 +418,13 @@ class ExternalTool(six.with_metaclass(ExternalToolMetaclass, Filter)):
             def replace(arg):
                 try:
                     return arg.format(*args, **kwargs)
-                except KeyError as e:
+                except KeyError, e:
                     # Treat "output" and "input" variables special, they
                     # are dealt with in :meth:`subprocess` instead.
                     if e.args[0] not in ('input', 'output'):
                         raise
                     return arg
-            argv = list(map(replace, self.argv))
+            argv = map(replace, self.argv)
         else:
             argv = self.argv
         self.subprocess(argv, out, data=data)
@@ -462,7 +451,6 @@ class ExternalTool(six.with_metaclass(ExternalToolMetaclass, Filter)):
                 if not hasattr(self, 'filename'):
                     self.fd, self.filename = tempfile.mkstemp()
                 return self.filename
-
             @property
             def created(self):
                 return hasattr(self, 'filename')
@@ -471,15 +459,15 @@ class ExternalTool(six.with_metaclass(ExternalToolMetaclass, Filter)):
         input_file = tempfile_on_demand()
         output_file = tempfile_on_demand()
         if hasattr(str, 'format'):   # Support Python 2.5 without the feature
-            argv = list(map(lambda item:
-                       item.format(input=input_file, output=output_file), argv))
+            argv = map(lambda item:
+                item.format(input=input_file, output=output_file), argv)
 
         try:
             if input_file.created:
                 if not data:
                     raise ValueError(
                         '{input} placeholder given, but no data passed')
-                with os.fdopen(input_file.fd, 'w') as f:
+                with os.fdopen(input_file.fd, 'wb') as f:
                     f.write(data.read() if hasattr(data, 'read') else data)
                     # No longer pass to stdin
                     data = None
@@ -491,22 +479,19 @@ class ExternalTool(six.with_metaclass(ExternalToolMetaclass, Filter)):
                 stdout=subprocess.PIPE,
                 stdin=subprocess.PIPE,
                 stderr=subprocess.PIPE)
-            data = (data.read() if hasattr(data, 'read') else data)
-            if data is not None:
-                data = data.encode('utf-8')
-            stdout, stderr = proc.communicate(data)
+            stdout, stderr = proc.communicate(
+                data.read() if hasattr(data, 'read') else data)
             if proc.returncode:
                 raise FilterError(
                     '%s: subprocess returned a non-success result code: '
                     '%s, stdout=%s, stderr=%s' % (
-                        cls.name or cls.__name__, 
-                        proc.returncode, stdout, stderr))
+                        cls.name or cls.__name__, proc.returncode, stdout, stderr))
             else:
                 if output_file.created:
-                    with os.fdopen(output_file.fd, 'r') as f:
+                    with os.fdopen(output_file.fd, 'rb') as f:
                         out.write(f.read())
                 else:
-                    out.write(stdout.decode('utf-8'))
+                    out.write(stdout)
         finally:
             if output_file.created:
                 os.unlink(output_file.filename)
@@ -544,7 +529,6 @@ class JavaTool(ExternalTool):
 
 _FILTERS = {}
 
-
 def register_filter(f):
     """Add the given filter to the list of know filters.
     """
@@ -568,7 +552,7 @@ def get_filter(f, *args, **kwargs):
         # Don't need to do anything.
         assert not args and not kwargs
         return f
-    elif isinstance(f, six.string_types):
+    elif isinstance(f, basestring):
         if f in _FILTERS:
             klass = _FILTERS[f]
         else:
@@ -583,74 +567,24 @@ def get_filter(f, *args, **kwargs):
 
     return klass(*args, **kwargs)
 
-CODE_FILES = ['.py', '.pyc', '.so']
-
-
-def is_module(name):
-    """Is this a recognized module type?
-    
-    Does this name end in one of the recognized CODE_FILES extensions?
-    
-    The file is assumed to exist, as unique_modules has found it using 
-    an os.listdir() call.
-    
-    returns the name with the extension stripped (the module name) or 
-        None if the name does not appear to be a module
-    """
-    for ext in CODE_FILES:
-        if name.endswith(ext):
-            return name[:-len(ext)]
-
-
-def is_package(directory):
-    """Is the (fully qualified) directory a python package?
-    
-    """
-    for ext in ['.py', '.pyc']:
-        if os.path.exists(os.path.join(directory, '__init__'+ext)):
-            return True 
-
-
-def unique_modules(directory):
-    """Find all unique module names within a directory 
-    
-    For each entry in the directory, check if it is a source 
-    code file-type (using is_code(entry)), or a directory with 
-    a source-code file-type at entry/__init__.py[c]?
-    
-    Filter the results to only produce a single entry for each 
-    module name.
-    
-    Filter the results to not include '_' prefixed names.
-    
-    yields each entry as it is encountered
-    """
-    found = {}
-    for entry in sorted(os.listdir(directory)):
-        if entry.startswith('_'):
-            continue 
-        module = is_module(entry)
-        if module:
-            if module not in found:
-                found[module] = entry
-                yield module
-        elif is_package(os.path.join(directory, entry)):
-            if entry not in found:
-                found[entry] = entry 
-                yield entry 
-
 
 def load_builtin_filters():
     from os import path
     import warnings
 
     current_dir = path.dirname(__file__)
-    for name in unique_modules(current_dir):
+    for entry in os.listdir(current_dir):
+        if entry.endswith('.py'):
+            name = path.splitext(entry)[0]
+        elif path.exists(path.join(current_dir, entry, '__init__.py')):
+            name = entry
+        else:
+            continue
 
         module_name = 'webassets.filter.%s' % name
         try:
             module = import_module(module_name)
-        except Exception as e:
+        except Exception, e:
             warnings.warn('Error while loading builtin filter '
                           'module \'%s\': %s' % (module_name, e))
         else:
@@ -663,3 +597,4 @@ def load_builtin_filters():
                         continue
                     register_filter(attr)
 load_builtin_filters()
+

@@ -3,17 +3,14 @@
 from __future__ import with_statement
 import contextlib
 
-try:
-    from urllib.request import Request as URLRequest, urlopen
-    from urllib.error import HTTPError
-except ImportError:
-    from urllib2 import Request as URLRequest, urlopen
-    from urllib2 import HTTPError
+import urllib2
 import logging
-from io import open
-from webassets.six.moves import filter
+try:
+    import cStringIO as StringIO
+except:
+    import StringIO
 
-from .utils import cmp_debug_levels, StringIO
+from utils import cmp_debug_levels
 
 
 __all__ = ('FileHunk', 'MemoryHunk', 'merge', 'FilterTool',
@@ -56,7 +53,7 @@ class BaseHunk(object):
         raise NotImplementedError()
 
     def save(self, filename):
-        with open(filename, 'w') as f:
+        with open(filename, 'wb') as f:
             f.write(self.data())
 
 
@@ -74,7 +71,7 @@ class FileHunk(BaseHunk):
         pass
 
     def data(self):
-        f = open(self.filename, 'r', encoding='utf-8')
+        f = open(self.filename, 'rb')
         try:
             return f.read()
         finally:
@@ -97,13 +94,13 @@ class UrlHunk(BaseHunk):
 
     def data(self):
         if not hasattr(self, '_data'):
-            request = URLRequest(self.url)
+            request = urllib2.Request(self.url)
 
             # Look in the cache for etag / last modified headers to use
             # TODO: "expires" header could be supported
             if self.env and self.env.cache:
                 headers = self.env.cache.get(
-                    ('url', 'headers', self.url))
+                    ('url', 'headers', self.url), python=True)
                 if headers:
                     etag, lmod = headers
                     if etag: request.add_header('If-None-Match', etag)
@@ -111,8 +108,8 @@ class UrlHunk(BaseHunk):
 
             # Make a request
             try:
-                response = urlopen(request)
-            except HTTPError as e:
+                response = urllib2.urlopen(request)
+            except urllib2.HTTPError, e:
                 if e.code != 304:
                     raise
                     # Use the cached version of the url
@@ -159,7 +156,7 @@ class MemoryHunk(BaseHunk):
         return self._data
 
     def save(self, filename):
-        f = open(filename, 'w', encoding='utf-8')
+        f = open(filename, 'wb')
         try:
             f.write(self.data())
         finally:
@@ -244,11 +241,11 @@ class FilterTool(object):
             kwargs_final = self.kwargs.copy()
             kwargs_final.update(kwargs or {})
 
-            data = StringIO(hunk.data())
+            data = StringIO.StringIO(hunk.data())
             for filter in filters:
                 log.debug('Running method "%s" of  %s with kwargs=%s',
                     type, filter, kwargs_final)
-                out = StringIO(u'') # For 2.x, StringIO().getvalue() returns str
+                out = StringIO.StringIO()
                 getattr(filter, type)(data, out, **kwargs_final)
                 data = out
                 data.seek(0)
@@ -299,7 +296,7 @@ class FilterTool(object):
 
         def func():
             filter = filters[0]
-            out = StringIO(u'')  # For 2.x, StringIO().getvalue() returns str
+            out = StringIO.StringIO()
             kwargs_final = self.kwargs.copy()
             kwargs_final.update(kwargs or {})
             log.debug('Running method "%s" of %s with args=%s, kwargs=%s',
@@ -337,6 +334,6 @@ def select_filters(filters, level):
     """Return from the list in ``filters`` those filters which indicate that
     they should run for the given debug level.
     """
-    return [f for f in filters
-            if f.max_debug_level is None or
-               cmp_debug_levels(level, f.max_debug_level) <= 0]
+    return filter(
+        lambda f: f.max_debug_level is None or
+                  cmp_debug_levels(level, f.max_debug_level) <= 0, filters)

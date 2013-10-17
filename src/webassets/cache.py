@@ -15,7 +15,6 @@ also serve in other places.
 
 import os
 from os import path
-from webassets import six
 from webassets.merge import BaseHunk
 from webassets.filter import Filter, freezedicts
 from webassets.utils import md5_constructor, pickle
@@ -37,7 +36,7 @@ def make_hashable(data):
     return freezedicts(data)
 
 
-def make_md5(*data):
+def make_md5(data):
     """Make a md5 hash based on``data``.
 
     Specifically, this knows about ``Hunk`` objects, and makes sure
@@ -60,21 +59,24 @@ def make_md5(*data):
                 for d in walk(k): yield d
                 for d in walk(obj[k]): yield d
         elif isinstance(obj, BaseHunk):
-            yield obj.data().encode('utf-8')
+            yield obj.data()
         elif isinstance(obj, Filter):
-            yield str(hash(obj)).encode('utf-8')
-        elif isinstance(obj, int):
-            yield str(obj).encode('utf-8')
-        elif isinstance(obj, six.text_type):
-            yield obj.encode('utf-8')
-        elif isinstance(obj, six.binary_type):
-            yield obj
+            yield str(hash(obj))
+        elif isinstance(obj, (int, basestring)):
+            yield str(obj)
         else:
             raise ValueError('Cannot MD5 type %s' % type(obj))
     md5 = md5_constructor()
     for d in walk(data):
         md5.update(d)
     return md5.hexdigest()
+
+
+def maybe_pickle(value):
+    """Pickle the given value if it is not a string."""
+    if not isinstance(value, basestring):
+        return pickle.dumps(value)
+    return value
 
 
 def safe_unpickle(string):
@@ -99,8 +101,12 @@ class BaseCache(object):
     One cache instance can only be used safely with a single Environment.
     """
 
-    def get(self, key):
+    def get(self, key, python=None):
         """Should return the cache contents, or False.
+
+        If ``python`` is set, the cache value will be unpickled before it is
+        returned. You need this when you passed a non-string value to
+        :meth:`set`..
         """
         raise NotImplementedError()
 
@@ -132,7 +138,7 @@ class MemoryCache(BaseCache):
                None == other or \
                id(self) == id(other)
 
-    def get(self, key):
+    def get(self, key, python=None):
         key = make_hashable(key)
         return self.cache.get(key, None)
 
@@ -156,8 +162,6 @@ class FilesystemCache(BaseCache):
     """Uses a temporary directory on the disk.
     """
 
-    V = 2   # We have changed the cache format once
-
     def __init__(self, directory):
         self.directory = directory
 
@@ -169,8 +173,8 @@ class FilesystemCache(BaseCache):
                self.directory == other or \
                id(self) == id(other)
 
-    def get(self, key):
-        filename = path.join(self.directory, '%s' % make_md5(self.V, key))
+    def get(self, key, python=None):
+        filename = path.join(self.directory, '%s' % make_md5(key))
         if not path.exists(filename):
             return None
         f = open(filename, 'rb')
@@ -179,13 +183,15 @@ class FilesystemCache(BaseCache):
         finally:
             f.close()
 
-        return safe_unpickle(result)
+        if python:
+            return safe_unpickle(result)
+        return result
 
     def set(self, key, data):
-        filename = path.join(self.directory, '%s' % make_md5(self.V, key))
+        filename = path.join(self.directory, '%s' % make_md5(key))
         f = open(filename, 'wb')
         try:
-            f.write(pickle.dumps(data))
+            f.write(maybe_pickle(data))
         finally:
             f.close()
 

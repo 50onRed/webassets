@@ -8,13 +8,11 @@ import os, sys
 from os import path
 import glob, fnmatch
 import types
-from webassets import six
 try:
     import yaml
 except ImportError:
     pass
 
-from webassets import six
 from webassets import Environment
 from webassets.bundle import Bundle
 from webassets.importlib import import_module
@@ -50,7 +48,7 @@ class YAMLLoader(object):
         Each item yielded will be either a string representing a file path
         or a bundle."""
         contents = data.get('contents', [])
-        if isinstance(contents, six.string_types):
+        if isinstance(contents, basestring):
             contents = contents,
         for content in contents:
             if isinstance(content, dict):
@@ -67,10 +65,10 @@ class YAMLLoader(object):
             depends=data.get('depends', None))
         return Bundle(*list(self._yield_bundle_contents(data)), **kwargs)
 
-    def _get_bundles(self, obj, known_bundles=None):
+    def _get_bundles(self, obj):
         """Return a dict that keys bundle names to bundles."""
         bundles = {}
-        for key, data in six.iteritems(obj):
+        for key, data in obj.iteritems():
             if data is None:
                 data = {}
             bundles[key] = self._get_bundle(data)
@@ -83,8 +81,6 @@ class YAMLLoader(object):
             for i, item in enumerate(bundle.contents):
                 if item in bundles:
                     contents[i] = bundles[item]
-                elif known_bundles and item in known_bundles:
-                    contents[i] = known_bundles[item]
             # cast back to a tuple
             contents = tuple(contents)
             if contents != bundle.contents:
@@ -96,13 +92,13 @@ class YAMLLoader(object):
 
         The filename can be False if it is unknown.
         """
-        if isinstance(self.file_or_filename, six.string_types):
+        if isinstance(self.file_or_filename, basestring):
             return open(self.file_or_filename), self.file_or_filename
 
         file = self.file_or_filename
         return file, getattr(file, 'name', False)
 
-    def load_bundles(self, environment=None):
+    def load_bundles(self):
         """Load a list of :class:`Bundle` instances defined in the YAML file.
 
         Expects the following format:
@@ -129,10 +125,6 @@ class YAMLLoader(object):
             jquery-ui:
                 contents: jqueryui/*.js
 
-        If an ``environment`` argument is given, it's bundles
-        may be referenced as well. Note that you may pass any
-        compatibly dict-like object.
-
         Finally, you may also use nesting:
 
         .. code-block:: yaml
@@ -150,7 +142,7 @@ class YAMLLoader(object):
         f, _ = self._open()
         try:
             obj = self.yaml.load(f) or {}
-            return self._get_bundles(obj, environment)
+            return self._get_bundles(obj)
         finally:
             f.close()
 
@@ -192,7 +184,7 @@ class YAMLLoader(object):
 
             # Load environment settings
             for setting in ('debug', 'cache', 'versions', 'url_expire',
-                            'auto_build', 'url', 'directory', 'manifest',
+                            'auto_build', 'url', 'directory',
                             # TODO: The deprecated values; remove at some point
                             'expire', 'updater'):
                 if setting in obj:
@@ -211,7 +203,7 @@ class YAMLLoader(object):
 
             # Load bundles
             bundles = self._get_bundles(obj.get('bundles', {}))
-            for name, bundle in six.iteritems(bundles):
+            for name, bundle in bundles.iteritems():
                 env.register(name, bundle)
 
             return env
@@ -232,7 +224,7 @@ class PythonLoader(object):
             try:
                 try:
                     self.module = import_module(module_name)
-                except ImportError as e:
+                except ImportError, e:
                     raise LoaderError(e)
             finally:
                 sys.path.pop(0)
@@ -256,7 +248,7 @@ class PythonLoader(object):
         """
         try:
             return getattr(self.module, 'environment')
-        except AttributeError as e:
+        except AttributeError, e:
             raise LoaderError(e)
 
 
@@ -286,7 +278,7 @@ class GlobLoader(object):
     def with_file(self, filename, then_run):
         """Call ``then_run`` with the file contents.
         """
-        file = open(filename, 'rb')
+        file = open(filename, 'r')
         try:
             contents = file.read()
             try:

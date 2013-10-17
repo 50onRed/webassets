@@ -193,6 +193,12 @@ Other
 .. autoclass:: webassets.filter.cssprefixer.CSSPrefixer
 
 
+``gzip``
+~~~~~~~~
+
+.. autoclass:: webassets.filter.gzip.GZip
+
+
 ``jinja2``
 ~~~~~~~~~~
 

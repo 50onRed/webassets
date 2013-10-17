@@ -1,4 +1,3 @@
-from __future__ import print_function
 ##  ParseMaster, version 1.0 (pre-release) (2005/05/12) x6
 ##  Copyright 2005, Dean Edwards
 ##  Web: http://dean.edwards.name/
@@ -9,11 +8,6 @@ from __future__ import print_function
 ##  Ported to Python by Florian Schulze
 
 import os, re
-import sys
-if sys.version < '3':
-    integer_types = (int, long,)
-else:
-    integer_types = (int,)
 
 # a multi-pattern parser
 
@@ -111,7 +105,7 @@ class ParseMaster:
                 replacement = pattern.replacement
                 if callable(replacement):
                     return replacement(match, i)
-                elif isinstance(replacement, integer_types):
+                elif isinstance(replacement, (int, long)):
                     return match.group(replacement+i)
                 else:
                     return replacement
@@ -333,7 +327,7 @@ class JavaScriptPacker:
                     sorted[_protected[word]] = word[1:]
                     protected[_protected[word]] = True
                     count[word] = 0
-            unsorted.sort(key=lambda a: count[a])
+            unsorted.sort(lambda a,b: count[b]-count[a])
             j = 0
             for i in range(len(sorted)):
                 if sorted[i] is None:
@@ -563,14 +557,14 @@ function _bar(_ocalvar) {
             _expected = open(expected).read()
         else:
             _expected = expected
-        print(script[:20], encoding, fastDecode, specialChars, expected[:20])
-        print("="*40)
+        print script[:20], encoding, fastDecode, specialChars, expected[:20]
+        print "="*40
         result = p.pack(_script, encoding, fastDecode, specialChars)
-        print(len(result), len(_script))
+        print len(result), len(_script)
         if (result != _expected):
-            print("ERROR!!!!!!!!!!!!!!!!")
-            print(_expected)
-            print(result)
+            print "ERROR!!!!!!!!!!!!!!!!"
+            print _expected
+            print result
             #print list(difflib.unified_diff(result, _expected))
 
 if __name__=='__main__':

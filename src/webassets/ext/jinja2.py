@@ -35,7 +35,7 @@ class AssetsExtension(Extension):
         )
 
     def parse(self, parser):
-        lineno = next(parser.stream).lineno
+        lineno = parser.stream.next().lineno
 
         files = []
         output = nodes.Const(None)
@@ -52,7 +52,7 @@ class AssetsExtension(Extension):
 
             # Lookahead to see if this is an assignment (an option)
             if parser.stream.current.test('name') and parser.stream.look().test('assign'):
-                name = next(parser.stream).value
+                name = parser.stream.next().value
                 parser.stream.skip()
                 value = parser.parse_expression()
                 if name == 'filters':
@@ -216,7 +216,7 @@ class Jinja2Loader(GlobLoader):
         for i, env in enumerate(self.jinja2_envs):
             try:
                 t = env.parse(contents.decode(self.charset))
-            except jinja2.exceptions.TemplateSyntaxError as e:
+            except jinja2.exceptions.TemplateSyntaxError, e:
                 #print ('jinja parser (env %d) failed: %s'% (i, e))
                 pass
             else:

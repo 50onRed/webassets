@@ -1,7 +1,6 @@
 from base64 import b64encode
 import mimetypes
-import os
-from webassets.utils import urlparse
+import os, urlparse
 
 from webassets.filter.cssrewrite.base import CSSUrlRewriter
 
@@ -61,10 +60,9 @@ class CSSDataUri(CSSUrlRewriter):
 
         try:
             if os.stat(filename).st_size <= (self.max_size or 2048):
-                with open(filename, 'rb') as f:
-                    data = b64encode(f.read())
+                data = b64encode(open(filename, 'rb').read())
                 return 'data:%s;base64,%s' % (
-                    mimetypes.guess_type(filename)[0], data.decode())
+                    mimetypes.guess_type(filename)[0], data)
         except (OSError, IOError):
             # Ignore the file not existing.
             # TODO: When we have a logging system, this could produce a warning

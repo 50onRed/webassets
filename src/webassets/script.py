@@ -1,4 +1,3 @@
-from __future__ import print_function
 import shutil
 import os, sys
 import time
@@ -187,7 +186,7 @@ class BuildCommand(Command):
                             os.makedirs(output_dir)
                     MemoryHunk(output.getvalue()).save(overwrite_filename)
                 built.append(bundle)
-            except BuildError as e:
+            except BuildError, e:
                 self.log.error("Failed, error was: %s" % e)
         if len(built):
             self.event_handlers['post_build']()
@@ -212,7 +211,7 @@ class WatchCommand(Command):
             # Before starting to watch for changes, also recognize changes
             # made while we did not run, and apply those immediately.
             for bundle in self.environment:
-                print('Bringing up to date: %s' % bundle.output)
+                print 'Bringing up to date: %s' % bundle.output
                 bundle.build(force=False)
 
             self.log.info("Watching %d bundles for changes..." %
@@ -223,16 +222,16 @@ class WatchCommand(Command):
 
                 built = []
                 for bundle in changed_bundles:
-                    print("Building bundle: %s ..." % bundle.output, end=' ')
+                    print "Building bundle: %s ..." % bundle.output,
                     sys.stdout.flush()
                     try:
                         bundle.build(force=True)
                         built.append(bundle)
-                    except BuildError as e:
-                        print("")
-                        print("Failed: %s" % e)
+                    except BuildError, e:
+                        print ""
+                        print "Failed: %s" % e
                     else:
-                        print("done")
+                        print "done"
 
                 if len(built):
                     self.event_handlers['post_build']()
@@ -366,7 +365,7 @@ class CommandLineEnvironment(object):
         """
         try:
             function = self.commands[command]
-        except KeyError as e:
+        except KeyError, e:
             raise CommandError('unknown command: %s' % e)
         else:
             return function(**args)
@@ -408,7 +407,7 @@ class GenericArgparseImplementation(object):
         def reload_config(self):
             try:
                 self.cmd.environment = YAMLLoader(self.ns.config).load_environment()
-            except Exception as e:
+            except Exception, e:
                 raise EnvironmentError(e)
             return True
 
@@ -554,8 +553,8 @@ class GenericArgparseImplementation(object):
         """
         try:
             return self.run_with_argv(argv)
-        except CommandError as e:
-            print(e)
+        except CommandError, e:
+            print e
             return 1
 
 

@@ -26,12 +26,11 @@ See:
     http://groups.google.com/group/compass-users/browse_thread/thread/daf55acda03656d1
 """
 
-import os
+import os, subprocess
 from os import path
 import tempfile
+import types
 import shutil
-import subprocess
-from webassets import six
 
 from webassets.exceptions import FilterError
 from webassets.filter import Filter, option
@@ -46,19 +45,10 @@ class CompassConfig(dict):
     def to_string(self):
         def string_rep(val):
             """ Determine the correct string rep for the config file """
-            if isinstance(val, bool):
-                # True -> true and False -> false
-                return str(val).lower()
-            elif isinstance(val, six.string_types) and val.startswith(':'):
-                # ruby symbols, like :nested, used for "output_style"
+            if type(val) == types.ListType:
                 return str(val)
-            elif isinstance(val, dict):
-                # ruby hashes, for "sass_options" for example
-                return '{%s}' % ', '.join("'%s' => '%s'" % i for i in val.items())
-            elif isinstance(val, tuple):
-                val = list(val)
-            # works fine with strings and lists
-            return repr(val)
+            else:
+                return '"%s"' % val
         return '\n'.join(['%s = %s' % (k, string_rep(v)) for k, v in self.items()])
 
 
@@ -134,7 +124,7 @@ class Compass(Filter):
 
         tempout = tempfile.mkdtemp()
         # Temporarily move to "tempout", so .sass-cache will be created there
-        old_wd = os.getcwd()
+        old_wd = os.getcwdu()
         os.chdir(tempout)
         try:
             # Make sure to use normpath() to not cause trouble with
