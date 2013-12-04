@@ -446,28 +446,22 @@ class ExternalTool(Filter):
             will be the content of this file, rather than stdout.
         """
 
-        class tempfile_on_demand(object):
-            def __repr__(self):
-                if not hasattr(self, 'filename'):
-                    self.fd, self.filename = tempfile.mkstemp()
-                return self.filename
-            @property
-            def created(self):
-                return hasattr(self, 'filename')
-
+        input_file = tempfile.NamedTemporaryFile('wb', delete=False)
+        output_file = tempfile.NamedTemporaryFile('rb', delete=False)
+        input_placeholder = '{input}' in argv
+        output_placeholder = '{output}' in argv
         # Replace input and output placeholders
-        input_file = tempfile_on_demand()
-        output_file = tempfile_on_demand()
-        if hasattr(str, 'format'):   # Support Python 2.5 without the feature
-            argv = map(lambda item:
-                item.format(input=input_file, output=output_file), argv)
+        if input_placeholder:
+            if hasattr(str, 'format'):   # Support Python 2.5 without the feature
+                argv = map(lambda item:
+                    item.format(input=input_file.name, output=output_file.name), argv)
 
         try:
-            if input_file.created:
+            if input_placeholder:
                 if not data:
                     raise ValueError(
                         '{input} placeholder given, but no data passed')
-                with os.fdopen(input_file.fd, 'wb') as f:
+                with input_file as f:
                     f.write(data.read() if hasattr(data, 'read') else data)
                     # No longer pass to stdin
                     data = None
@@ -487,16 +481,16 @@ class ExternalTool(Filter):
                     '%s, stdout=%s, stderr=%s' % (
                         cls.name or cls.__name__, proc.returncode, stdout, stderr))
             else:
-                if output_file.created:
-                    with os.fdopen(output_file.fd, 'rb') as f:
+                if output_placeholder:
+                    with output_file as f:
                         out.write(f.read())
                 else:
                     out.write(stdout)
         finally:
-            if output_file.created:
-                os.unlink(output_file.filename)
-            if input_file.created:
-                os.unlink(input_file.filename)
+            if input_placeholder:
+                os.unlink(output_file.name)
+            if output_placeholder:
+                os.unlink(input_file.name)
 
 
 class JavaTool(ExternalTool):

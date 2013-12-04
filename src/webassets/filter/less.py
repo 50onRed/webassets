@@ -80,4 +80,4 @@ class Less(ExternalTool):
     def input(self, in_, out, source_path, **kw):
         # Set working directory to the source file so that includes are found
         with working_directory(filename=source_path):
-            self.subprocess([self.less or 'lessc', '-'], out, in_)
+            self.subprocess([self.less or 'lessc', '--verbose', '-'], out, in_)
