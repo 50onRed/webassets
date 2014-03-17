@@ -129,7 +129,7 @@ class Filter(object):
     max_debug_level = False
 
     def __init__(self, **kwargs):
-        self.env = None
+        self.ctx = None
         self._options = parse_options(self.__class__.options)
 
         # Resolve options given directly to the filter. This
@@ -154,9 +154,9 @@ class Filter(object):
             return cmp(self.id(), other.id())
         return NotImplemented
 
-    def set_environment(self, env):
+    def set_context(self, ctx):
         """This is called before the filter is used."""
-        self.env = env
+        self.ctx = ctx
 
     def get_config(self, setting=False, env=None, require=True,
                    what='dependency', type=None):
@@ -194,7 +194,7 @@ class Filter(object):
 
         value = None
         if not setting is False:
-            value = self.env.config.get(setting, None)
+            value = self.ctx.get(setting, None)
 
         if value is None and not env is False:
             value = os.environ.get(env)
@@ -457,12 +457,16 @@ class ExternalTool(Filter):
                     item.format(input=input_file.name, output=output_file.name), argv)
 
         try:
-            if input_placeholder:
+            data = (data.read() if hasattr(data, 'read') else data)
+            if data is not None:
+                data = data.encode('utf-8')
+
+            if input_file.created:
                 if not data:
                     raise ValueError(
                         '{input} placeholder given, but no data passed')
-                with input_file as f:
-                    f.write(data.read() if hasattr(data, 'read') else data)
+                with os.fdopen(input_file.fd, 'wb') as f:
+                    f.write(data)
                     # No longer pass to stdin
                     data = None
 
@@ -472,18 +476,18 @@ class ExternalTool(Filter):
                 # StringIO objects (which are not supported by subprocess)
                 stdout=subprocess.PIPE,
                 stdin=subprocess.PIPE,
-                stderr=subprocess.PIPE)
-            stdout, stderr = proc.communicate(
-                data.read() if hasattr(data, 'read') else data)
+                stderr=subprocess.PIPE,
+                shell=os.name == 'nt')
+            stdout, stderr = proc.communicate(data)
             if proc.returncode:
                 raise FilterError(
                     '%s: subprocess returned a non-success result code: '
                     '%s, stdout=%s, stderr=%s' % (
                         cls.name or cls.__name__, proc.returncode, stdout, stderr))
             else:
-                if output_placeholder:
-                    with output_file as f:
-                        out.write(f.read())
+                if output_file.created:
+                    with open(output_file.filename, 'rb') as f:
+                        out.write(f.read().decode('utf-8'))
                 else:
                     out.write(stdout)
         finally:

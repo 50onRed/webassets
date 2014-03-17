@@ -47,8 +47,16 @@ class CompassConfig(dict):
             """ Determine the correct string rep for the config file """
             if type(val) == types.ListType:
                 return str(val)
-            else:
-                return '"%s"' % val
+            elif isinstance(val, dict):
+                # ruby hashes, for "sass_options" for example
+                return '{%s}' % ', '.join("'%s' => '%s'" % i for i in val.items())
+            elif isinstance(val, tuple):
+                val = list(val)
+            elif isinstance(val, six.text_type) and not six.PY3:
+                # remove unicode indicator in python2 unicode string
+                return repr(val.encode('utf-8'))
+            # works fine with strings and lists
+            return repr(val)
         return '\n'.join(['%s = %s' % (k, string_rep(v)) for k, v in self.items()])
 
 
@@ -138,10 +146,10 @@ class Compass(Filter):
             # information about the urls under which media files will be
             # available. This is hard for two reasons: First, the options in
             # question aren't supported on the command line, so we need to write
-            # a temporary config file. Secondly, the assume a defined and
+            # a temporary config file. Secondly, they assume defined and
             # separate directories for "images", "stylesheets" etc., something
             # webassets knows nothing of: we don't support the user defining
-            # something such directories. Because we traditionally had this
+            # such directories. Because we traditionally had this
             # filter point all type-specific directories to the root media
             # directory, we will define the paths to match this. In other
             # words, in Compass, both inline-image("img/test.png) and
@@ -153,18 +161,19 @@ class Compass(Filter):
             # the configuration file via the COMPASS_CONFIG setting (see
             # tickets #36 and #125).
             #
-            # Note that is also the --relative-assets option, which we can't
-            # use because it calculates an actual relative path between the
-            # image and the css output file, the latter being in a temporary
-            # directory in our case.
+            # Note that there is also the --relative-assets option, which we
+            # can't use because it calculates an actual relative path between
+            # the image and the css output file, the latter being in a
+            # temporary directory in our case.
             config = CompassConfig(
-                project_path=self.env.directory,
-                http_path=self.env.url,
+                project_path=self.ctx.directory,
+                http_path=self.ctx.url,
                 http_images_dir='',
                 http_stylesheets_dir='',
                 http_fonts_dir='',
                 http_javascripts_dir='',
                 images_dir='',
+                output_style=':expanded',
             )
             # Update with the custom config dictionary, if any.
             if self.config:
@@ -185,7 +194,6 @@ class Compass(Filter):
                             '--config', config_file,
                             '--quiet',
                             '--boring',
-                            '--output-style', 'expanded',
                             source_path])
 
             proc = subprocess.Popen(command,

@@ -52,6 +52,10 @@ class Sass(Filter):
         The path to the Sass binary. If not set, the filter will
         try to run ``sass`` as if it's in the system path.
 
+    SASS_STYLE
+        The style for the output CSS. Can be one of ``expanded`` (default),
+        ``nested``, ``compact`` or ``compressed``.
+
     SASS_DEBUG_INFO
         If set to ``True``, will cause Sass to output debug information
         to be used by the FireSass Firebug plugin. Corresponds to the
@@ -79,6 +83,7 @@ class Sass(Filter):
         'includes_dir': 'SASS_INCLUDES_DIR',  # deprecated!
         'load_paths': 'SASS_LOAD_PATHS',
         'libs': 'SASS_LIBS',
+        'style': 'SASS_STYLE',
     }
     max_debug_level = None
 
@@ -103,16 +108,16 @@ class Sass(Filter):
         try:
             args = [self.binary or 'sass',
                     '--stdin',
-                    '--style', 'expanded',
+                    '--style', self.style or 'expanded',
                     '--line-comments']
-            if isinstance(self.env.cache, FilesystemCache):
+            if isinstance(self.ctx.cache, FilesystemCache):
                 args.extend(['--cache-location',
-                             os.path.join(old_dir, self.env.cache.directory, 'sass')])
+                             os.path.join(old_dir, self.ctx.cache.directory, 'sass')])
             elif not cd:
                 # Without a fixed working directory, the location of the cache
                 # is basically undefined, so prefer not to use one at all.
                 args.extend(['--no-cache'])
-            if (self.env.debug if self.debug_info is None else self.debug_info):
+            if (self.ctx.environment.debug if self.debug_info is None else self.debug_info):
                 args.append('--debug-info')
             if self.use_scss:
                 args.append('--scss')
